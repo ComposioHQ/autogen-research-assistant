@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from autogen_agents import AgentManager
 import asyncio
+import traceback
 
 logging.basicConfig(level=logging.INFO)
 
@@ -28,10 +29,8 @@ if TRIGGER_ID is None or TRIGGER_ID == "" or CHANNEL_ID is None or CHANNEL_ID ==
 def run_agents(topic: str):
     logging.info(f"Running agents for topic: {topic}")
     agents = AgentManager(topic=topic)
+    logging.info("Initialisation done")
     agents.execute()
-
-
-import traceback
 
 
 async def async_run_agents(topic, user):

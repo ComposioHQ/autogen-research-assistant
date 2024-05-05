@@ -86,12 +86,15 @@ class AgentManager:
             tools=[App.NOTION], caller=self.notion_agent, executor=self.user_proxy
         )
 
+        logging.info("Notion Toolset initialized")
         # Initialise the Composio Slack Tool Set
         slack_composio_tools = ComposioToolset()
 
         slack_composio_tools.register_tools(
             tools=[App.SLACK], caller=self.slack_agent, executor=self.user_proxy
         )
+
+        logging.info("Slack Toolset initialized")
 
         groupchat = GroupChat(
             agents=[
