@@ -1,0 +1,30 @@
+research_task:
+  description: >
+    Description:
+    Conduct a thorough research about {topic}
+    Make sure you find any interesting and relevant information given
+    the current year is 2024.
+    Expected Output:
+    A list with 10 bullet points of the most relevant information about {topic}
+
+reporting_task:
+  description: >
+    Description:
+    Review the context you got and expand each topic into a full section for a report.
+    Make sure the report is detailed and contains any and all relevant information.
+    Expected Output:
+    A fully fledge reports with the mains topics, each with a full section of information.
+
+notion_task:
+  description: >
+    Description:
+    Write a document on notion that summarizes crewai activity.
+    Expected Output:
+    A Notion document with a title and a summary
+
+slack_task:
+  description: >
+    Description:
+    Write a message on slack channel 'random' that summarizes complete crewai research activity. Write a summary of your findings and attach the report.
+    Expected Output:
+    A slack message with a summary of entire actions done and final output.  
