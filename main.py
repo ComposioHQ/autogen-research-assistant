@@ -1,14 +1,16 @@
 # main.py
 
-import os
-import uvicorn
+import asyncio
 import logging
+import os
+import traceback
+
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+
 from autogen_agents import AgentManager
-import asyncio
-import traceback
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,14 +18,18 @@ load_dotenv()
 
 app = FastAPI()
 
-TRIGGER_ID = os.environ.get("TRIGGER_ID", None).strip()
-CHANNEL_ID = os.environ.get("CHANNEL_ID", None).strip()
+TRIGGER_ID = os.environ.get("TRIGGER_ID", None)
+CHANNEL_ID = os.environ.get("CHANNEL_ID", None)
+
 
 if TRIGGER_ID is None or TRIGGER_ID == "" or CHANNEL_ID is None or CHANNEL_ID == "":
     logging.error(
         "Please set TRIGGER_ID and CHANNEL_ID environment variables in the .env file"
     )
     exit(1)
+
+TRIGGER_ID = TRIGGER_ID.strip()
+CHANNEL_ID = CHANNEL_ID.strip()
 
 
 def run_agents(topic: str):
@@ -70,12 +76,16 @@ async def webhook(request: Request):
     return JSONResponse(content={}, status_code=200)
 
 
-async def main():
-    logging.info("Starting server on host 0.0.0.0 at port 2000")
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=2000)
-    server = uvicorn.Server(config)
-    await server.serve()
+# async def main():
+#     logging.info("Starting server on host 0.0.0.0 at port 2000")
+#     config = uvicorn.Config(app=app, host="0.0.0.0", port=2000)
+#     server = uvicorn.Server(config)
+#     await server.serve()
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# if __name__ == "__main__":
+#     asyncio.run(main())
+
+asyncio.run(async_run_agents("superman", "test"))
+
+print("Done")

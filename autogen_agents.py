@@ -1,15 +1,9 @@
-import os
-import yaml
 import logging
+import os
 
-from autogen import (
-    UserProxyAgent,
-    AssistantAgent,
-    GroupChat,
-    GroupChatManager,
-)
-from composio_autogen import ComposioToolset, App
-
+import yaml
+from autogen import AssistantAgent, GroupChat, GroupChatManager, UserProxyAgent
+from composio_autogen import App, ComposioToolset
 
 logging.basicConfig(level=logging.INFO)
 
@@ -40,41 +34,82 @@ reporting_task_description = tasks_config["reporting_task"]["description"]
 notion_task_description = tasks_config["notion_task"]["description"]
 slack_task_description = tasks_config["slack_task"]["description"]
 
+TERMINATION_MESSAGE = "TERMINATE ONCE YOU ARE DONE WITH YOUR JOB by saying TERMINATE"
+
 
 ### Autogen class
 class AgentManager:
     def __init__(self, topic):
         logging.info("Initializing AgentManager with topic: %s", topic)
         self.topic = topic
+        agent_system_message = (
+            research_agent_description.replace("{topic}", topic)
+            + "\n"
+            + research_task_description.replace("{topic}", topic)
+        )
         self.researcher_agent = AssistantAgent(
-            "researcher",
-            description=research_agent_description.replace("{topic}", topic),
+            name="researcher_agent",
+            system_message=agent_system_message,
+            description=agent_system_message,
             llm_config=llm_config,
+            human_input_mode="NEVER",
         )
-
+        agent_system_message = (
+            reporting_agent_description.replace("{topic}", topic)
+            + "\n"
+            + reporting_task_description.replace("{topic}", topic)
+        )
         self.reporting_analyst_agent = AssistantAgent(
-            "reporting_analyst",
-            description=reporting_agent_description.replace("{topic}", topic),
+            name="reporting_analyst_agent",
+            system_message=agent_system_message,
+            description=agent_system_message,
             llm_config=llm_config,
+            human_input_mode="NEVER",
         )
-
+        agent_system_message = (
+            notion_agent_description.replace("{topic}", topic)
+            + "\n"
+            + notion_task_description.replace("{topic}", topic)
+        )
         self.notion_agent = AssistantAgent(
-            "notion_agent",
-            description=notion_agent_description.replace("{topic}", topic),
+            name="notion_agent",
+            system_message=agent_system_message,
+            description=agent_system_message,
             llm_config=llm_config,
+            human_input_mode="NEVER",
         )
-
+        agent_system_message = (
+            slack_agent_description.replace("{topic}", topic)
+            + "\n"
+            + slack_task_description.replace("{topic}", topic)
+        )
         self.slack_agent = AssistantAgent(
-            "slack_agent",
-            description=slack_agent_description.replace("{topic}", topic),
+            name="slack_agent",
+            system_message=agent_system_message,
+            description=agent_system_message,
             llm_config=llm_config,
+            human_input_mode="NEVER",
         )
 
         self.user_proxy = UserProxyAgent(
-            "user_proxy",
+            "user",
+            system_message="""Your job is to act as a user and make sure the task is completed. 
+            You will get an output of the tasks in response, then check if task was completed. 
+            If task was completed, you will send a message to the group chat with the following: 
+            "TERMINATE"
+            If you think output looks good, send "TERMINATE" message. Do not ever send empty output. 
+            """,
+            description="""Your job is to act as a user and make sure the task is completed. 
+            You will get an output of the tasks in response, then check if task was completed. 
+            If task was completed, you will send a message to the group chat with the following: 
+            "TERMINATE"
+            If you think output looks good, send "TERMINATE" message. Do not ever send empty output. 
+            """,
             is_termination_msg=lambda x: x.get("content", "")
-            and "TERMINATE" in x.get("content", ""),
+            and x.get("content", "").rstrip().endswith("TERMINATE"),
+            # max_consecutive_auto_reply=1,  # terminate without auto-reply
             human_input_mode="NEVER",  # Don't take input from User
+            llm_config=llm_config,
             code_execution_config={"use_docker": False},
         )
 
@@ -83,7 +118,9 @@ class AgentManager:
         notion_composio_tools = ComposioToolset()
 
         notion_composio_tools.register_tools(
-            tools=[App.NOTION], caller=self.notion_agent, executor=self.user_proxy
+            tools=[App.NOTION],
+            caller=self.notion_agent,
+            executor=self.user_proxy,
         )
 
         logging.info("Notion Toolset initialized")
@@ -91,34 +128,48 @@ class AgentManager:
         slack_composio_tools = ComposioToolset()
 
         slack_composio_tools.register_tools(
-            tools=[App.SLACK], caller=self.slack_agent, executor=self.user_proxy
+            tools=[App.SLACK],
+            caller=self.slack_agent,
+            executor=self.user_proxy,
         )
 
         logging.info("Slack Toolset initialized")
 
-        groupchat = GroupChat(
-            agents=[
-                self.user_proxy,
-                self.researcher_agent,
-                self.reporting_analyst_agent,
-                self.slack_agent,
-                self.notion_agent,
-            ],
-            messages=[],
-            max_round=50,
-        )
-
-        self.manager = GroupChatManager(groupchat=groupchat, llm_config=llm_config)
-        logging.info("AgentManager initialized successfully")
-
     def execute(self):
         logging.info("Executing tasks for topic: %s", self.topic)
-        self.user_proxy.initiate_chat(
-            self.manager,
-            message="Please complete the following tasks:"
-            + research_task_description.replace("{topic}", self.topic)
-            + reporting_task_description.replace("{topic}", self.topic)
-            + notion_task_description.replace("{topic}", self.topic)
-            + slack_task_description.replace("{topic}", self.topic),
+        chat_results = self.user_proxy.initiate_chats(
+            [
+                {
+                    "recipient": self.researcher_agent,
+                    "message": research_task_description.replace("{topic}", self.topic),
+                    "max_turns": 6,
+                    "clear_history": True,
+                    "silent": False,
+                    "summary_method": "reflection_with_llm",
+                },
+                {
+                    "recipient": self.reporting_analyst_agent,
+                    "message": reporting_task_description.replace(
+                        "{topic}", self.topic
+                    ),
+                    "max_turns": 6,
+                    "summary_method": "reflection_with_llm",
+                },
+                {
+                    "recipient": self.notion_agent,
+                    "message": notion_task_description.replace("{topic}", self.topic),
+                    "max_turns": 15,
+                    "summary_method": "reflection_with_llm",
+                },
+                {
+                    "recipient": self.slack_agent,
+                    "message": slack_task_description.replace("{topic}", self.topic),
+                    "max_turns": 15,
+                    "summary_method": "reflection_with_llm",
+                },
+            ],
         )
         logging.info("Tasks initiated for topic: %s", self.topic)
+        print("First Chat Summary: ", chat_results[0].summary)
+        print("Second Chat Summary: ", chat_results[1].summary)
+        print("Third Chat Summary: ", chat_results[2].summary)

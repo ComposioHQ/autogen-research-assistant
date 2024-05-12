@@ -18,13 +18,13 @@ reporting_task:
 notion_task:
   description: >
     Description:
-    Write a document on notion that summarizes crewai activity.
+    Write a document on notion that summarizes {topic} research activity. Create the page under "research" page.
     Expected Output:
     A Notion document with a title and a summary
 
 slack_task:
   description: >
     Description:
-    Write a message on slack channel 'random' that summarizes complete crewai research activity. Write a summary of your findings and attach the report.
+    Write a message on slack channel 'ram' that summarizes complete {topic} research activity. Write a summary of your findings and attach the report.
     Expected Output:
     A slack message with a summary of entire actions done and final output.  
