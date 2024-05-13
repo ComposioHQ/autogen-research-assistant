@@ -100,7 +100,6 @@ Below is the basic setup you can do to run the repository.
    ```
 
    This command initializes the Autogen Agent, assembling the agents and assigning them tasks according to the configuration.
-   By default, it generates a `report.md` file with the output of research on LLMs in the root folder.
 
    Start sending messages to the Slack channel and see Composio in action, seamlessly updating Notion with detailed reports.
 

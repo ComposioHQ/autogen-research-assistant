@@ -1,5 +1,3 @@
-# main.py
-
 import asyncio
 import logging
 import os
@@ -76,16 +74,12 @@ async def webhook(request: Request):
     return JSONResponse(content={}, status_code=200)
 
 
-# async def main():
-#     logging.info("Starting server on host 0.0.0.0 at port 2000")
-#     config = uvicorn.Config(app=app, host="0.0.0.0", port=2000)
-#     server = uvicorn.Server(config)
-#     await server.serve()
+async def main():
+    logging.info("Starting server on host 0.0.0.0 at port 2000")
+    config = uvicorn.Config(app=app, host="0.0.0.0", port=2000)
+    server = uvicorn.Server(config)
+    await server.serve()
 
 
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
-asyncio.run(async_run_agents("superman", "test"))
-
-print("Done")
+if __name__ == "__main__":
+    asyncio.run(main())

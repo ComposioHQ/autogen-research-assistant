@@ -1,175 +1,141 @@
 import logging
 import os
-
 import yaml
-from autogen import AssistantAgent, GroupChat, GroupChatManager, UserProxyAgent
+from autogen import AssistantAgent, UserProxyAgent, ConversableAgent
 from composio_autogen import App, ComposioToolset
 
+# Set up logging configuration
 logging.basicConfig(level=logging.INFO)
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-if OPENAI_API_KEY is None:
-    logging.error("Please set OPENAI_API_KEY environment variable in the .env file")
+# Load the OPENAI_API_KEY from environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+if not OPENAI_API_KEY:
+    logging.error("OPENAI_API_KEY environment variable is not set in the .env file")
     exit(1)
 
-llm_config = {
+# Define configuration for the language model
+language_model_config = {
     "model": "gpt-4-turbo",
     "api_key": OPENAI_API_KEY,
 }
 
-with open("config/agents.yaml", "r") as file:
-    agents_config = yaml.safe_load(file)
 
-with open("config/tasks.yaml", "r") as file:
-    tasks_config = yaml.safe_load(file)
-
-research_agent_description = agents_config["researcher"]["system_prompt"]
-reporting_agent_description = agents_config["reporting_analyst"]["system_prompt"]
-notion_agent_description = agents_config["notion_agent"]["system_prompt"]
-slack_agent_description = agents_config["slack_agent"]["system_prompt"]
-
-research_task_description = tasks_config["research_task"]["description"]
-reporting_task_description = tasks_config["reporting_task"]["description"]
-notion_task_description = tasks_config["notion_task"]["description"]
-slack_task_description = tasks_config["slack_task"]["description"]
-
-TERMINATION_MESSAGE = "TERMINATE ONCE YOU ARE DONE WITH YOUR JOB by saying TERMINATE"
+# Define a function to load YAML configuration files
+def load_yaml_config(file_path):
+    with open(file_path, "r") as file:
+        return yaml.safe_load(file)
 
 
-### Autogen class
+# Load agent and task configurations from YAML files
+agents_config = load_yaml_config("config/agents.yaml")
+tasks_config = load_yaml_config("config/tasks.yaml")
+
+# Map agent types to their respective system prompts from the configuration
+agent_prompts = {
+    "research": agents_config["researcher"]["system_prompt"],
+    "notion": agents_config["notion_agent"]["system_prompt"],
+    "slack": agents_config["slack_agent"]["system_prompt"],
+}
+
+# Map task types to their descriptions from the configuration
+task_details = {
+    "research": tasks_config["research_task"]["description"],
+    "notion": tasks_config["notion_task"]["description"],
+    "slack": tasks_config["slack_task"]["description"],
+}
+
+
+# Function to create an agent with dynamic system messages based on the topic
+def create_agent(agent_type, topic):
+    system_message = f"{agent_prompts[agent_type].replace('{topic}', topic)}\n{task_details[agent_type].replace('{topic}', topic)}"
+    return AssistantAgent(
+        name=f"{agent_type}_agent",
+        system_message=system_message,
+        description=system_message,
+        llm_config=language_model_config,
+        human_input_mode="NEVER",
+    )
+
+
+# Function to initialize a toolset for an agent
+def init_toolset(user_proxy, app, agent):
+    toolset = ComposioToolset()
+    toolset.register_tools(tools=[app], caller=agent, executor=user_proxy)
+    logging.info(f"Toolset for {app} initialized")
+
+
+# Description for the user proxy agent
+user_proxy_description = """Your job is to act as a user and ensure the task is completed. 
+You will receive the output of the tasks, then verify if the task was completed. 
+If the task was completed, send a "TERMINATE" message to the group chat. 
+Ensure not to send empty outputs."""
+
+
+# New summary method that passes on complete conversations.
+def my_summary_method(
+    sender: ConversableAgent, recipient: ConversableAgent, summary_args: dict
+):
+    last_msg = recipient.chat_messages[sender]
+    return str(last_msg)
+
+
+# Class to manage different agents and their interactions
 class AgentManager:
     def __init__(self, topic):
-        logging.info("Initializing AgentManager with topic: %s", topic)
+        logging.info(f"Initializing AgentManager for topic: {topic}")
         self.topic = topic
-        agent_system_message = (
-            research_agent_description.replace("{topic}", topic)
-            + "\n"
-            + research_task_description.replace("{topic}", topic)
-        )
-        self.researcher_agent = AssistantAgent(
-            name="researcher_agent",
-            system_message=agent_system_message,
-            description=agent_system_message,
-            llm_config=llm_config,
-            human_input_mode="NEVER",
-        )
-        agent_system_message = (
-            reporting_agent_description.replace("{topic}", topic)
-            + "\n"
-            + reporting_task_description.replace("{topic}", topic)
-        )
-        self.reporting_analyst_agent = AssistantAgent(
-            name="reporting_analyst_agent",
-            system_message=agent_system_message,
-            description=agent_system_message,
-            llm_config=llm_config,
-            human_input_mode="NEVER",
-        )
-        agent_system_message = (
-            notion_agent_description.replace("{topic}", topic)
-            + "\n"
-            + notion_task_description.replace("{topic}", topic)
-        )
-        self.notion_agent = AssistantAgent(
-            name="notion_agent",
-            system_message=agent_system_message,
-            description=agent_system_message,
-            llm_config=llm_config,
-            human_input_mode="NEVER",
-        )
-        agent_system_message = (
-            slack_agent_description.replace("{topic}", topic)
-            + "\n"
-            + slack_task_description.replace("{topic}", topic)
-        )
-        self.slack_agent = AssistantAgent(
-            name="slack_agent",
-            system_message=agent_system_message,
-            description=agent_system_message,
-            llm_config=llm_config,
-            human_input_mode="NEVER",
-        )
 
+        # Create agents with dynamic system messages based on the topic
+        self.researcher_agent = create_agent("research", topic)
+        self.notion_agent = create_agent("notion", topic)
+        self.slack_agent = create_agent("slack", topic)
+
+        # Initialize the user proxy agent
         self.user_proxy = UserProxyAgent(
             "user",
-            system_message="""Your job is to act as a user and make sure the task is completed. 
-            You will get an output of the tasks in response, then check if task was completed. 
-            If task was completed, you will send a message to the group chat with the following: 
-            "TERMINATE"
-            If you think output looks good, send "TERMINATE" message. Do not ever send empty output. 
-            """,
-            description="""Your job is to act as a user and make sure the task is completed. 
-            You will get an output of the tasks in response, then check if task was completed. 
-            If task was completed, you will send a message to the group chat with the following: 
-            "TERMINATE"
-            If you think output looks good, send "TERMINATE" message. Do not ever send empty output. 
-            """,
-            is_termination_msg=lambda x: x.get("content", "")
-            and x.get("content", "").rstrip().endswith("TERMINATE"),
-            # max_consecutive_auto_reply=1,  # terminate without auto-reply
-            human_input_mode="NEVER",  # Don't take input from User
-            llm_config=llm_config,
+            system_message=user_proxy_description,
+            description=user_proxy_description,
+            is_termination_msg=lambda x: (x.get("content") or "")
+            .rstrip()
+            .endswith("TERMINATE"),
+            human_input_mode="NEVER",
+            llm_config=language_model_config,
             code_execution_config={"use_docker": False},
         )
 
-        logging.info("Initializing Composio Toolsets for Notion and Slack")
-        # Initialise the Composio Notion Tool Set
-        notion_composio_tools = ComposioToolset()
+        # Initialize toolsets for Notion and Slack agents
+        self.init_toolsets()
 
-        notion_composio_tools.register_tools(
-            tools=[App.NOTION],
-            caller=self.notion_agent,
-            executor=self.user_proxy,
-        )
-
-        logging.info("Notion Toolset initialized")
-        # Initialise the Composio Slack Tool Set
-        slack_composio_tools = ComposioToolset()
-
-        slack_composio_tools.register_tools(
-            tools=[App.SLACK],
-            caller=self.slack_agent,
-            executor=self.user_proxy,
-        )
-
-        logging.info("Slack Toolset initialized")
+    def init_toolsets(self):
+        logging.info("Initializing toolsets for Notion and Slack agents")
+        init_toolset(self.user_proxy, App.NOTION, self.notion_agent)
+        init_toolset(self.user_proxy, App.SLACK, self.slack_agent)
 
     def execute(self):
-        logging.info("Executing tasks for topic: %s", self.topic)
+        logging.info(f"Executing tasks for the topic: {self.topic}")
         chat_results = self.user_proxy.initiate_chats(
             [
                 {
                     "recipient": self.researcher_agent,
-                    "message": research_task_description.replace("{topic}", self.topic),
-                    "max_turns": 6,
+                    "message": task_details["research"].replace("{topic}", self.topic),
+                    "max_turns": 10,
                     "clear_history": True,
                     "silent": False,
-                    "summary_method": "reflection_with_llm",
-                },
-                {
-                    "recipient": self.reporting_analyst_agent,
-                    "message": reporting_task_description.replace(
-                        "{topic}", self.topic
-                    ),
-                    "max_turns": 6,
-                    "summary_method": "reflection_with_llm",
+                    "summary_method": my_summary_method,
                 },
                 {
                     "recipient": self.notion_agent,
-                    "message": notion_task_description.replace("{topic}", self.topic),
-                    "max_turns": 15,
-                    "summary_method": "reflection_with_llm",
+                    "message": task_details["notion"].replace("{topic}", self.topic),
+                    "max_turns": 10,
+                    "summary_method": my_summary_method,
                 },
                 {
                     "recipient": self.slack_agent,
-                    "message": slack_task_description.replace("{topic}", self.topic),
-                    "max_turns": 15,
-                    "summary_method": "reflection_with_llm",
+                    "message": task_details["slack"].replace("{topic}", self.topic),
+                    "max_turns": 10,
+                    "summary_method": my_summary_method,
                 },
             ],
         )
-        logging.info("Tasks initiated for topic: %s", self.topic)
+        logging.info(f"Tasks initiated for the topic: {self.topic}")
         print("First Chat Summary: ", chat_results[0].summary)
-        print("Second Chat Summary: ", chat_results[1].summary)
-        print("Third Chat Summary: ", chat_results[2].summary)
