@@ -60,7 +60,7 @@ def create_agent(agent_type, topic):
 # Function to initialize a toolset for an agent
 def init_toolset(user_proxy, app, agent):
     toolset = ComposioToolSet()
-    toolset.get_tools(tools=[App.app], caller=agent, executor=user_proxy)
+    toolset.register_tools(tools=[App.app], caller=agent, executor=user_proxy)
     logging.info(f"Toolset for {app} initialized")
 
 
