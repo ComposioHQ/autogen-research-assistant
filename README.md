@@ -67,8 +67,8 @@ Below is the basic setup you can do to run the repository.
    Use Composio CLI to add integrations for Notion and Slack:
 
    ```bash
-   composio-cli add notion
-   composio-cli add slack
+   composio add notion
+   composio add slack
    ```
 
    Complete the authorization flows for Notion and Slack.
@@ -76,7 +76,7 @@ Below is the basic setup you can do to run the repository.
 4. **Update the trigger callback URL**
 
    ```bash
-   composio-cli set global-trigger-callback "<ngrok-url>"
+   composio-cli triggers callback set "<ngrok-url>"
    ```
 
    Here the NGROK_URL_REPLACE is supposed to be replaced by the URL you get on running command `ngrok http http://0.0.0.0:2000`
@@ -86,7 +86,7 @@ Below is the basic setup you can do to run the repository.
 5. **Enable Slack receive trigger**
 
    ```bash
-   composio-cli enable-trigger slack_receive_message
+   composio-cli triggers enable slack_receive_message
    ```
 
    Update `TRIGGER_ID` in .env
