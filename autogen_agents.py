@@ -2,7 +2,7 @@ import logging
 import os
 import yaml
 from autogen import AssistantAgent, UserProxyAgent, ConversableAgent
-from composio_autogen import App, ComposioToolset
+from composio_autogen import App, ComposioToolSet
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO)
@@ -59,8 +59,8 @@ def create_agent(agent_type, topic):
 
 # Function to initialize a toolset for an agent
 def init_toolset(user_proxy, app, agent):
-    toolset = ComposioToolset()
-    toolset.register_tools(tools=[app], caller=agent, executor=user_proxy)
+    toolset = ComposioToolSet()
+    toolset.get_tools(tools=[App.app], caller=agent, executor=user_proxy)
     logging.info(f"Toolset for {app} initialized")
 
 
